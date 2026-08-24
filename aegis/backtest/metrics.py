@@ -5,6 +5,7 @@ Provides deterministic calculation of financial metrics.
 """
 
 from decimal import Decimal
+from typing import Optional
 
 from aegis.backtest.models import VirtualAccount, BacktestReport
 from aegis.interfaces.market_data import Timeframe
@@ -36,11 +37,9 @@ def calculate_metrics(
         win_rate = Decimal(winning_trades) / Decimal(total_trades)
 
     # Profit factor
-    profit_factor = Decimal("0.0")
+    profit_factor: Optional[Decimal] = None
     if abs(gross_loss) > Decimal("0"):
         profit_factor = gross_profit / abs(gross_loss)
-    elif gross_profit > Decimal("0"):
-        profit_factor = Decimal("999.0")  # Arbitrary high number for 100% win rate w/ profit
         
     # Drawdown pct
     max_drawdown_pct = Decimal("0.0")

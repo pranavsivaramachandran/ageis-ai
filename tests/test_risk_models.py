@@ -80,6 +80,8 @@ class TestRiskDecisionValidation:
                 prediction_direction=PredictionDirection.BUY,
                 confidence=Decimal("-0.1"),
                 status=RiskStatus.APPROVED,
+                risk_amount=Decimal("100.0"),
+                position_size=Decimal("1.5"),
             )
 
     def test_invalid_confidence_above_one(self):
@@ -91,6 +93,8 @@ class TestRiskDecisionValidation:
                 prediction_direction=PredictionDirection.BUY,
                 confidence=Decimal("1.1"),
                 status=RiskStatus.APPROVED,
+                risk_amount=Decimal("100.0"),
+                position_size=Decimal("1.5"),
             )
 
     def test_timezone_naive_timestamp_rejected(self):
@@ -102,6 +106,8 @@ class TestRiskDecisionValidation:
                 prediction_direction=PredictionDirection.BUY,
                 confidence=Decimal("0.85"),
                 status=RiskStatus.APPROVED,
+                risk_amount=Decimal("100.0"),
+                position_size=Decimal("1.5"),
             )
 
     def test_empty_symbol_rejected(self):
@@ -113,6 +119,8 @@ class TestRiskDecisionValidation:
                 prediction_direction=PredictionDirection.BUY,
                 confidence=Decimal("0.85"),
                 status=RiskStatus.APPROVED,
+                risk_amount=Decimal("100.0"),
+                position_size=Decimal("1.5"),
             )
 
 
@@ -127,6 +135,8 @@ class TestDataPreservation:
             prediction_direction=PredictionDirection.BUY,
             confidence=Decimal("0.85"),
             status=RiskStatus.APPROVED,
+            risk_amount=Decimal("100.0"),
+            position_size=Decimal("1.5"),
         )
         assert decision.symbol == "BTCUSD"
 
@@ -139,6 +149,8 @@ class TestDataPreservation:
             prediction_direction=PredictionDirection.BUY,
             confidence=Decimal("0.85"),
             status=RiskStatus.APPROVED,
+            risk_amount=Decimal("100.0"),
+            position_size=Decimal("1.5"),
         )
         assert decision.timestamp == ts
 
@@ -150,6 +162,8 @@ class TestDataPreservation:
             prediction_direction=PredictionDirection.BUY,
             confidence=Decimal("0.85"),
             status=RiskStatus.APPROVED,
+            risk_amount=Decimal("100.0"),
+            position_size=Decimal("1.5"),
         )
         assert decision.timeframe == Timeframe.D1
 
@@ -161,6 +175,8 @@ class TestDataPreservation:
             prediction_direction=PredictionDirection.SELL,
             confidence=Decimal("0.85"),
             status=RiskStatus.APPROVED,
+            risk_amount=Decimal("100.0"),
+            position_size=Decimal("1.5"),
         )
         assert decision.prediction_direction == PredictionDirection.SELL
 
@@ -172,6 +188,8 @@ class TestDataPreservation:
             prediction_direction=PredictionDirection.BUY,
             confidence=Decimal("0.85"),
             status=RiskStatus.APPROVED,
+            risk_amount=Decimal("100.0"),
+            position_size=Decimal("1.5"),
         )
         with pytest.raises(Exception):
             decision.symbol = "ETHUSD"

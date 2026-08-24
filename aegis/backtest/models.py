@@ -54,6 +54,7 @@ class SimulatedTrade(BaseModel):
     entry_timestamp: datetime
     entry_price: Decimal = Field(..., gt=0)
     position_size: Decimal = Field(..., gt=0)
+    stop_loss_price: Optional[Decimal] = Field(default=None, gt=0)
 
     exit_timestamp: Optional[datetime] = None
     exit_price: Optional[Decimal] = Field(default=None, gt=0)
@@ -73,8 +74,8 @@ class SimulatedTrade(BaseModel):
             if self.exit_timestamp.tzinfo is None or self.exit_timestamp.utcoffset() != timedelta(0):
                 raise ValueError("Exit timestamp must be timezone-aware UTC")
                 
-            if self.exit_timestamp <= self.entry_timestamp:
-                raise ValueError("Exit timestamp must be strictly after entry timestamp")
+            if self.exit_timestamp < self.entry_timestamp:
+                raise ValueError("Exit timestamp must be on or after entry timestamp")
                 
             if self.exit_price is None or self.realized_pnl is None or self.exit_reason is None:
                 raise ValueError("Completed trade must have exit_price, realized_pnl, and exit_reason")
@@ -111,6 +112,37 @@ class VirtualAccount(BaseModel):
             peak_equity=capital
         )
         
+    def lock_margin(self, amount: Decimal) -> "VirtualAccount":
+        """Lock available cash for a new position."""
+        if amount > self.available_cash:
+            raise ValueError(f"Insufficient cash. Required {amount}, available {self.available_cash}")
+        return VirtualAccount(
+            initial_capital=self.initial_capital,
+            current_equity=self.current_equity,
+            available_cash=self.available_cash - amount,
+            realized_pnl=self.realized_pnl,
+            peak_equity=self.peak_equity,
+            maximum_drawdown=self.maximum_drawdown,
+            trade_count=self.trade_count
+        )
+
+    def update_mtm(self, floating_pnl: Decimal) -> "VirtualAccount":
+        """Update peak equity and max drawdown using floating PnL."""
+        floating_equity = self.current_equity + floating_pnl
+        new_peak = max(self.peak_equity, floating_equity)
+        drawdown = new_peak - floating_equity
+        new_max_drawdown = max(self.maximum_drawdown, drawdown)
+        
+        return VirtualAccount(
+            initial_capital=self.initial_capital,
+            current_equity=self.current_equity,
+            available_cash=self.available_cash,
+            realized_pnl=self.realized_pnl,
+            peak_equity=new_peak,
+            maximum_drawdown=new_max_drawdown,
+            trade_count=self.trade_count
+        )
+
     def update_after_trade(self, pnl: Decimal) -> "VirtualAccount":
         """Returns a new VirtualAccount state after a trade completes."""
         new_equity = self.current_equity + pnl
@@ -122,7 +154,7 @@ class VirtualAccount(BaseModel):
         return VirtualAccount(
             initial_capital=self.initial_capital,
             current_equity=new_equity,
-            available_cash=new_equity,  # Assuming no overlapping trades for now
+            available_cash=new_equity,  # Releases all margin and applies PnL
             realized_pnl=self.realized_pnl + pnl,
             peak_equity=new_peak,
             maximum_drawdown=new_max_drawdown,
@@ -148,7 +180,7 @@ class BacktestReport(BaseModel):
     winning_trades: int
     losing_trades: int
     win_rate: Decimal
-    profit_factor: Decimal
+    profit_factor: Optional[Decimal] = None
     
     max_drawdown: Decimal
     max_drawdown_pct: Decimal

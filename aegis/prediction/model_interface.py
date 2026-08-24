@@ -48,7 +48,7 @@ class FeatureSchema(BaseModel):
         
         # We manually list the known numerical fields of FeatureVector.
         numeric_fields = [
-            "sma_value", "ema_value", "rsi_value", "macd_line", "macd_signal", 
+            "last_close", "sma_value", "ema_value", "rsi_value", "macd_line", "macd_signal", 
             "macd_histogram", "atr_value", "bollinger_upper", "bollinger_middle", 
             "bollinger_lower", "momentum_value", "volatility"
         ]

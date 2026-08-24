@@ -21,7 +21,7 @@ def test_calculate_metrics_empty():
     assert report.total_pnl == Decimal("0.0")
     assert report.total_return == Decimal("0.0")
     assert report.win_rate == Decimal("0.0")
-    assert report.profit_factor == Decimal("0.0")
+    assert report.profit_factor is None
     assert report.average_trade_pnl == Decimal("0.0")
 
 def test_calculate_metrics_with_trades():

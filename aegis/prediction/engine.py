@@ -191,10 +191,6 @@ class BaselinePredictor(PredictionModel):
     # Private methods
     # ===============================================================
 
-    def _validate_features(self, fv: FeatureVector) -> None:
-        """Reject FeatureVectors containing NaN or Inf values. Handled by schema."""
-        pass
-
     def _collect_votes(
         self, fv: FeatureVector
     ) -> list[tuple[str, float, float]]:
@@ -379,4 +375,6 @@ class PredictionEngine:
         
     def predict(self, fv: FeatureVector) -> PredictionResult:
         """Forward the prediction request to the underlying model."""
+        if not self.model.is_ready():
+            raise RuntimeError(f"Prediction model '{self.model.model_id}' is not ready.")
         return self.model.predict(fv)

@@ -73,7 +73,7 @@ def test_look_ahead_bias_prevention():
     
     # Mock Feature Builder
     fb = MagicMock()
-    fb.build.return_value = MagicMock(last_close=Decimal("100.0"))
+    fb.build.return_value = MagicMock(last_close=Decimal("100.0"), atr_value=1.0)
     
     # Mock Prediction Engine
     pe = MagicMock()
@@ -95,7 +95,7 @@ def test_look_ahead_bias_prevention():
         timeframe=Timeframe.H1,
         status="APPROVED",
         risk_amount=Decimal("100"),
-        position_size=Decimal("1000"),
+        position_size=Decimal("10"),
         timestamp=dt
     )
     
@@ -126,11 +126,16 @@ def test_look_ahead_bias_prevention():
     
     # Predict called multiple times, we can assert on feature builder calls
     # that it never sees a candle > current
+    for call in fb.build.call_args_list:
+        args, kwargs = call
+        history_passed = args[0]
+        # Assert the history slice ends exactly at one of the candles
+        assert history_passed[-1].timestamp <= c5.timestamp
     
 def test_entry_timing():
     # If prediction happens at T, entry must be at T+1 open
     fb = MagicMock()
-    fb.build.return_value = MagicMock(last_close=Decimal("100.0"))
+    fb.build.return_value = MagicMock(last_close=Decimal("100.0"), atr_value=1.0)
     
     pe = MagicMock()
     dt = datetime(2025, 1, 1, 10, 0, tzinfo=timezone.utc)
@@ -150,7 +155,7 @@ def test_entry_timing():
             called_count[0] += 1
             return RiskDecision(
                 symbol="EUR/USD", prediction_direction=PredictionDirection.BUY, confidence=Decimal("0.9"),
-                timeframe=Timeframe.H1, status="APPROVED", risk_amount=Decimal("100"), position_size=Decimal("1000"), timestamp=dt
+                timeframe=Timeframe.H1, status="APPROVED", risk_amount=Decimal("100"), position_size=Decimal("10"), timestamp=dt
             )
         return RiskDecision(
                 symbol="EUR/USD", prediction_direction=PredictionDirection.BUY, confidence=Decimal("0.9"),

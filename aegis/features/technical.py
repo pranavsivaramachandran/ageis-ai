@@ -55,6 +55,10 @@ def simple_returns(candles: list[OHLC]) -> Optional[list[float]]:
 
     Return[i] = (close[i] - close[i-1]) / close[i-1]
 
+    Note: The returned list contains values corresponding to candles[1:].
+    The first candle provides the baseline for the first return.
+    If 5 candles are provided, 4 returns are computed.
+
     Minimum data: 2 candles.
     Returns: List of (n-1) return values, or None if insufficient data.
              Individual returns are None if the previous close is zero.

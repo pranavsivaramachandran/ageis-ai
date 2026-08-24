@@ -87,7 +87,7 @@ def test_simulated_trade_invalid_timestamps():
     dt = datetime(2025, 1, 1, 10, 0, tzinfo=timezone.utc)
     dt2 = dt - timedelta(hours=1) # Exit before entry
     
-    with pytest.raises(ValueError, match="strictly after"):
+    with pytest.raises(ValueError, match="on or after"):
         SimulatedTrade(
             trade_id="t1",
             symbol="EUR/USD",

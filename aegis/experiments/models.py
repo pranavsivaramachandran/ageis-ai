@@ -6,6 +6,7 @@ metadata, configuration, splits, and results.
 """
 
 from datetime import datetime
+import pydantic
 from pydantic import BaseModel, Field
 from typing import Optional
 import hashlib
@@ -15,7 +16,10 @@ from aegis.backtest.models import BacktestReport
 
 
 class DatasetMetadata(BaseModel):
-    """Metadata representing a canonical dataset identity."""
+    """
+    Metadata representing a canonical dataset identity.
+    Note: The identity property represents metadata uniqueness, not a full content hash.
+    """
     
     symbol: str = Field(..., min_length=1)
     timeframe: Timeframe
@@ -45,6 +49,25 @@ class TemporalSplit(BaseModel):
     test: list[OHLC] = Field(default_factory=list)
     
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
+
+    def __post_init__(self):
+        # Additional chronological validation (since it's an arbitrary generic list, Pydantic's model_validator is better, 
+        # but TemporalSplit might be constructed manually. We will use a model_validator)
+        pass
+
+    @pydantic.model_validator(mode='after')
+    def validate_chronology(self) -> 'TemporalSplit':
+        if self.validation and self.train:
+            if self.train[-1].timestamp >= self.validation[0].timestamp:
+                raise ValueError("Train data overlaps with or succeeds Validation data chronologically.")
+        
+        if self.test and self.validation:
+            if self.validation[-1].timestamp >= self.test[0].timestamp:
+                raise ValueError("Validation data overlaps with or succeeds Test data chronologically.")
+        elif self.test and self.train:
+            if self.train[-1].timestamp >= self.test[0].timestamp:
+                raise ValueError("Train data overlaps with or succeeds Test data chronologically.")
+        return self
 
 
 class ExperimentConfig(BaseModel):

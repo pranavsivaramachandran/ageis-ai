@@ -18,6 +18,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+import hashlib
+
+from pydantic import BaseModel, Field
 
 from aegis.interfaces.market_data import OHLC, Timeframe
 from aegis.features.technical import (
@@ -84,6 +87,28 @@ class FeatureVector:
     momentum_value: Optional[float] = None
     volatility: Optional[float] = None
 
+class FeatureBuilderConfig(BaseModel):
+    """Configuration for FeatureBuilder parameters."""
+    sma_period: int = Field(default=20, gt=0)
+    ema_period: int = Field(default=20, gt=0)
+    rsi_period: int = Field(default=14, gt=0)
+    macd_fast: int = Field(default=12, gt=0)
+    macd_slow: int = Field(default=26, gt=0)
+    macd_signal: int = Field(default=9, gt=0)
+    atr_period: int = Field(default=14, gt=0)
+    bollinger_period: int = Field(default=20, gt=0)
+    bollinger_std: float = Field(default=2.0, gt=0)
+    momentum_period: int = Field(default=10, gt=0)
+    volatility_period: int = Field(default=20, gt=0)
+
+    model_config = {"frozen": True}
+
+    @property
+    def identity(self) -> str:
+        """Deterministic identity for this feature builder configuration."""
+        content = f"{self.sma_period}|{self.ema_period}|{self.rsi_period}|{self.macd_fast}|{self.macd_slow}|{self.macd_signal}|{self.atr_period}|{self.bollinger_period}|{self.bollinger_std}|{self.momentum_period}|{self.volatility_period}"
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+
 
 class FeatureBuilder:
     """
@@ -105,29 +130,25 @@ class FeatureBuilder:
 
     def __init__(
         self,
-        sma_period: int = 20,
-        ema_period: int = 20,
-        rsi_period: int = 14,
-        macd_fast: int = 12,
-        macd_slow: int = 26,
-        macd_signal: int = 9,
-        atr_period: int = 14,
-        bollinger_period: int = 20,
-        bollinger_std: float = 2.0,
-        momentum_period: int = 10,
-        volatility_period: int = 20,
+        config: Optional[FeatureBuilderConfig] = None,
+        **kwargs
     ) -> None:
-        self.sma_period = sma_period
-        self.ema_period = ema_period
-        self.rsi_period = rsi_period
-        self.macd_fast = macd_fast
-        self.macd_slow = macd_slow
-        self.macd_signal = macd_signal
-        self.atr_period = atr_period
-        self.bollinger_period = bollinger_period
-        self.bollinger_std = bollinger_std
-        self.momentum_period = momentum_period
-        self.volatility_period = volatility_period
+        if config is not None:
+            self.config = config
+        else:
+            self.config = FeatureBuilderConfig(**kwargs)
+
+        self.sma_period = self.config.sma_period
+        self.ema_period = self.config.ema_period
+        self.rsi_period = self.config.rsi_period
+        self.macd_fast = self.config.macd_fast
+        self.macd_slow = self.config.macd_slow
+        self.macd_signal = self.config.macd_signal
+        self.atr_period = self.config.atr_period
+        self.bollinger_period = self.config.bollinger_period
+        self.bollinger_std = self.config.bollinger_std
+        self.momentum_period = self.config.momentum_period
+        self.volatility_period = self.config.volatility_period
 
     @property
     def minimum_candles(self) -> int:

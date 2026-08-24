@@ -29,3 +29,6 @@ coverage.xml
 
 # Database (generated at runtime)
 aegis.db
+
+# Other
+repomix-output.xml

@@ -269,6 +269,18 @@ class TestDataPreservation:
 class TestInvalidInputs:
     """Verify that invalid numeric values are rejected."""
 
+    def test_nan_last_close_rejected(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=float("nan"))
+        with pytest.raises(PredictionError, match="invalid"):
+            predictor.predict(fv)
+            
+    def test_inf_last_close_rejected(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=float("inf"))
+        with pytest.raises(PredictionError, match="invalid"):
+            predictor.predict(fv)
+
     def test_nan_rsi_rejected(self):
         predictor = BaselinePredictor()
         fv = _base_fv(rsi_value=float("nan"))
@@ -395,6 +407,17 @@ class TestPredictionEventCompat:
         result = predictor.predict(_bullish_fv())
         event = result.to_prediction_event()
         assert event.trace_id == ""
+
+class TestPredictionEngineWrapper:
+    def test_predict_raises_when_not_ready(self):
+        from aegis.prediction.engine import PredictionEngine
+        
+        class NotReadyModel(BaselinePredictor):
+            def is_ready(self): return False
+            
+        engine = PredictionEngine(NotReadyModel())
+        with pytest.raises(RuntimeError, match="not ready"):
+            engine.predict(_bullish_fv())
 
 
 # ===================================================================

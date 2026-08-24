@@ -31,9 +31,9 @@ class RiskManagementEngine:
 
         Args:
             prediction: The PredictionResult to evaluate.
-            current_daily_loss: Accumulated loss for the current day.
-            current_weekly_loss: Accumulated loss for the current week.
-            current_monthly_loss: Accumulated loss for the current month.
+            current_daily_loss: Accumulated REALIZED loss for the current day.
+            current_weekly_loss: Accumulated REALIZED loss for the current week.
+            current_monthly_loss: Accumulated REALIZED loss for the current month.
             risk_distance: Price distance to stop-loss (used for position sizing).
 
         Returns:
@@ -62,29 +62,28 @@ class RiskManagementEngine:
             return self._reject(prediction, "Maximum monthly loss limit reached.")
             
         # 4. Position sizing
-        risk_amount = None
-        position_size = None
+        if risk_distance is None:
+            return self._reject(prediction, "risk_distance is required for position sizing.")
+            
+        if risk_distance <= Decimal("0"):
+            return self._reject(prediction, "Risk distance must be strictly positive.")
+            
+        risk_amount = config.RISK_MAX_RISK_PER_TRADE
+            
+        # Prevent division by zero mathematically although checked above
+        if risk_distance.is_zero():
+            return self._reject(prediction, "Risk distance cannot be zero.")
+            
+        position_size = risk_amount / risk_distance
         
-        if risk_distance is not None:
-            if risk_distance <= Decimal("0"):
-                return self._reject(prediction, "Risk distance must be strictly positive.")
-                
-            risk_amount = config.RISK_MAX_RISK_PER_TRADE
+        if position_size > config.RISK_MAX_POSITION_SIZE:
+            return self._reject(
+                prediction,
+                f"Calculated position size {position_size} exceeds maximum {config.RISK_MAX_POSITION_SIZE}."
+            )
             
-            # Prevent division by zero mathematically although checked above
-            if risk_distance.is_zero():
-                return self._reject(prediction, "Risk distance cannot be zero.")
-                
-            position_size = risk_amount / risk_distance
-            
-            if position_size > config.RISK_MAX_POSITION_SIZE:
-                return self._reject(
-                    prediction,
-                    f"Calculated position size {position_size} exceeds maximum {config.RISK_MAX_POSITION_SIZE}."
-                )
-                
-            if position_size <= Decimal("0"):
-                return self._reject(prediction, "Calculated position size must be strictly positive.")
+        if position_size <= Decimal("0"):
+            return self._reject(prediction, "Calculated position size must be strictly positive.")
                 
         return RiskDecision(
             symbol=prediction.symbol,

@@ -48,7 +48,7 @@ class TestRiskEngineBaseRules:
     def test_valid_prediction_accepted(self):
         engine = RiskManagementEngine()
         pred = _valid_buy_prediction()
-        decision = engine.evaluate_prediction(pred)
+        decision = engine.evaluate_prediction(pred, risk_distance=Decimal("10.0"))
         assert decision.status == RiskStatus.APPROVED
 
     def test_neutral_prediction_rejected(self):
@@ -81,7 +81,7 @@ class TestRiskEngineLossLimits:
         pred = _valid_buy_prediction()
         
         # Test just below limit
-        decision = engine.evaluate_prediction(pred, current_daily_loss=config.RISK_MAX_DAILY_LOSS - Decimal("1"))
+        decision = engine.evaluate_prediction(pred, current_daily_loss=config.RISK_MAX_DAILY_LOSS - Decimal("1"), risk_distance=Decimal("10.0"))
         assert decision.status == RiskStatus.APPROVED
         
         # Test exactly at limit

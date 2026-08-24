@@ -45,20 +45,22 @@ def test_full_pipeline_end_to_end():
     
     # Register and wrap predictor
     registry = ModelRegistry()
-    baseline = BaselinePredictor(direction_threshold=0.05)
+    baseline = BaselinePredictor(direction_threshold=0.005)
     registry.register(baseline)
     
     model = registry.get("baseline", 1)
     pe = PredictionEngine(model)
     
     
-    # Backtest Config
-    config = SimulationConfig(initial_capital=Decimal("10000"), holding_period_candles=3)
+    from aegis.core.config import AegisConfig
     
-    with patch('aegis.core.config.config.RISK_MIN_CONFIDENCE', Decimal("0.0")), \
-         patch('aegis.core.config.config.RISK_MAX_POSITION_SIZE', Decimal("1000.0")):
+    # Backtest Config
+    sim_config = SimulationConfig(initial_capital=Decimal("20000"), holding_period_candles=3)
+    test_config = AegisConfig(RISK_MIN_CONFIDENCE=Decimal("0.0"), RISK_MAX_POSITION_SIZE=Decimal("1000.0"))
+    
+    with patch('aegis.risk.engine.config', test_config):
         re = RiskManagementEngine()
-        backtester = BacktestEngine(fb, pe, re, config)
+        backtester = BacktestEngine(fb, pe, re, sim_config)
         
         # 3. Execute
         report = backtester.run(history)

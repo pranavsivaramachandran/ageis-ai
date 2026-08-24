@@ -62,8 +62,11 @@ class StateMachine:
             )
             self._current_state = new_state
             
+            # Snapshot callbacks inside the lock to avoid modification during iteration
+            callbacks_to_run = list(self._callbacks[new_state])
+            
         # Execute callbacks outside the lock to prevent deadlocks
-        for callback in self._callbacks[new_state]:
+        for callback in callbacks_to_run:
             try:
                 callback()
             except Exception as e:

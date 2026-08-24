@@ -10,7 +10,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from aegis.interfaces.market_data import Timeframe
 from aegis.prediction.models import PredictionDirection
@@ -84,6 +84,13 @@ class RiskDecision(BaseModel):
     model_config = {
         "frozen": True,
     }
+
+    @model_validator(mode='after')
+    def validate_approved_status(self) -> 'RiskDecision':
+        if self.status == RiskStatus.APPROVED:
+            if self.risk_amount is None or self.position_size is None:
+                raise ValueError("risk_amount and position_size must be set when status is APPROVED.")
+        return self
 
     @field_validator("timestamp")
     @classmethod

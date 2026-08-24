@@ -22,7 +22,7 @@ class AegisConfig(BaseSettings):
     Core configuration for the AEGIS AI platform.
     Uses environment variables for secure, flexible configuration.
     """
-    model_config = SettingsConfigDict(env_prefix="AEGIS_", env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="AEGIS_", env_file=".env", env_file_encoding="utf-8", extra="ignore", frozen=True)
     
     # System mode
     SYSTEM_MODE: str = Field(default="PREDICTION_ONLY", description="System execution mode. Must remain PREDICTION_ONLY for Sprint 1-2.")
@@ -32,9 +32,9 @@ class AegisConfig(BaseSettings):
     
     # Risk Management Configuration
     RISK_MIN_CONFIDENCE: Decimal = Field(default=Decimal("0.7"), description="Minimum confidence required for risk approval.")
-    RISK_MAX_DAILY_LOSS: Decimal = Field(default=Decimal("1000.0"), description="Maximum daily loss allowed.")
-    RISK_MAX_WEEKLY_LOSS: Decimal = Field(default=Decimal("5000.0"), description="Maximum weekly loss allowed.")
-    RISK_MAX_MONTHLY_LOSS: Decimal = Field(default=Decimal("15000.0"), description="Maximum monthly loss allowed.")
+    RISK_MAX_DAILY_LOSS: Decimal = Field(default=Decimal("1000.0"), description="Maximum daily realized loss allowed.")
+    RISK_MAX_WEEKLY_LOSS: Decimal = Field(default=Decimal("5000.0"), description="Maximum weekly realized loss allowed.")
+    RISK_MAX_MONTHLY_LOSS: Decimal = Field(default=Decimal("15000.0"), description="Maximum monthly realized loss allowed.")
     RISK_MAX_RISK_PER_TRADE: Decimal = Field(default=Decimal("100.0"), description="Maximum risk amount per trade.")
     RISK_MAX_POSITION_SIZE: Decimal = Field(default=Decimal("10.0"), description="Maximum position size allowed.")
 

@@ -13,8 +13,8 @@ class TestExecutionAgent:
 
     def test_execution_agent_fails_in_prediction_only(self, monkeypatch):
         import aegis.core.config
-        # Explicitly set to PREDICTION_ONLY
-        monkeypatch.setattr(aegis.core.config.config, "SYSTEM_MODE", "PREDICTION_ONLY")
+        test_config = aegis.core.config.AegisConfig(SYSTEM_MODE="PREDICTION_ONLY")
+        monkeypatch.setattr(aegis.core.config, "config", test_config)
         
         agent = ExecutionAgent()
         with pytest.raises(RuntimeError, match="ExecutionAgent invoked while system is in PREDICTION_ONLY mode"):

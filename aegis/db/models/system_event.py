@@ -12,7 +12,7 @@ class SystemEvent(Base):
     __tablename__ = "system_events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     event_type = Column(String(50), nullable=False, index=True)
     detail = Column(Text, nullable=True)
     trace_id = Column(String(64), nullable=True, index=True)

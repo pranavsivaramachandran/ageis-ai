@@ -134,8 +134,8 @@ class BaselinePredictor:
             )
 
         # Weighted average score
-        total_weight = sum(w for _, w in votes)
-        weighted_score = sum(v * w for v, w in votes) / total_weight
+        total_weight = sum(w for _, _, w in votes)
+        weighted_score = sum(v * w for _, v, w in votes) / total_weight
 
         # Determine direction
         if weighted_score > self._threshold:
@@ -201,55 +201,54 @@ class BaselinePredictor:
 
     def _collect_votes(
         self, fv: FeatureVector
-    ) -> list[tuple[float, float]]:
+    ) -> list[tuple[str, float, float]]:
         """
         Collect directional votes from available features.
 
-        Returns a list of (vote, weight) tuples where:
+        Returns a list of (feature_name, vote, weight) tuples where:
             vote ∈ [-1.0, +1.0]
             weight > 0
 
         Only features that are not None contribute.
         """
-        votes: list[tuple[float, float]] = []
+        votes: list[tuple[str, float, float]] = []
 
         # --- RSI ---
         if fv.rsi_value is not None:
             vote = self._score_rsi(fv.rsi_value)
-            votes.append((vote, _WEIGHTS["rsi"]))
+            votes.append(("RSI", vote, _WEIGHTS["rsi"]))
 
         # --- MACD Histogram ---
         if fv.macd_histogram is not None:
-            vote = self._score_macd(fv.macd_histogram)
-            votes.append((vote, _WEIGHTS["macd"]))
+            vote = self._score_macd(fv, fv.macd_histogram)
+            votes.append(("MACD", vote, _WEIGHTS["macd"]))
 
         # --- SMA vs last close ---
-        if fv.sma_value is not None and fv.returns is not None:
+        if fv.sma_value is not None:
             vote = self._score_ma_relationship(fv, fv.sma_value)
             if vote is not None:
-                votes.append((vote, _WEIGHTS["sma"]))
+                votes.append(("SMA", vote, _WEIGHTS["sma"]))
 
         # --- EMA vs last close ---
-        if fv.ema_value is not None and fv.returns is not None:
+        if fv.ema_value is not None:
             vote = self._score_ma_relationship(fv, fv.ema_value)
             if vote is not None:
-                votes.append((vote, _WEIGHTS["ema"]))
+                votes.append(("EMA", vote, _WEIGHTS["ema"]))
 
         # --- Momentum ---
         if fv.momentum_value is not None:
-            vote = self._score_momentum(fv.momentum_value)
-            votes.append((vote, _WEIGHTS["momentum"]))
+            vote = self._score_momentum(fv, fv.momentum_value)
+            votes.append(("Momentum", vote, _WEIGHTS["momentum"]))
 
         # --- Bollinger Position ---
         if (
             fv.bollinger_upper is not None
             and fv.bollinger_lower is not None
             and fv.bollinger_middle is not None
-            and fv.returns is not None
         ):
             vote = self._score_bollinger(fv)
             if vote is not None:
-                votes.append((vote, _WEIGHTS["bollinger"]))
+                votes.append(("Bollinger", vote, _WEIGHTS["bollinger"]))
 
         return votes
 
@@ -278,19 +277,22 @@ class BaselinePredictor:
             return max(-0.5 - (rsi_value - 70.0) / 60.0, -1.0)
 
     @staticmethod
-    def _score_macd(histogram: float) -> float:
+    def _score_macd(fv: FeatureVector, histogram: float) -> float:
         """
         Score MACD histogram direction.
 
         Positive histogram → bullish vote
         Negative histogram → bearish vote
 
-        The magnitude is bounded by a sigmoid-like mapping to stay in [-1, 1].
+        Normalized by last_close to be scale-invariant, then bounded via tanh.
+        Limitation: True MACD normalization requires historical variance of the histogram.
+        Using last_close is a safe, simple approximation for a baseline predictor.
         """
-        if histogram == 0.0:
+        if histogram == 0.0 or fv.last_close == 0.0:
             return 0.0
-        # Use tanh for smooth bounded mapping
-        return math.tanh(histogram)
+        
+        normalized = histogram / fv.last_close
+        return math.tanh(normalized * 1000.0)
 
     @staticmethod
     def _score_ma_relationship(fv: FeatureVector, ma_value: float) -> Optional[float]:
@@ -299,94 +301,74 @@ class BaselinePredictor:
 
         Close > MA → bullish (+)
         Close < MA → bearish (-)
+        Close == MA → neutral (0)
 
         The deviation is expressed as a fraction of MA and bounded via tanh.
         """
         if ma_value == 0.0:
             return None
 
-        # Reconstruct the latest close from returns:
-        # We don't have a raw close, but we can infer relative position.
-        # The last return = (close - prev_close) / prev_close
-        # Instead, compare directly: if returns[-1] is available and positive,
-        # and close > MA, it's bullish.
-        # A simpler approach: use returns to estimate close relative to MA.
-        # Since we lack a raw close in FeatureVector, we check if returns
-        # are consistently positive (price trending up vs MA typically rises slower).
-        if fv.returns is None or len(fv.returns) == 0:
-            return None
-
-        # Use the sum of recent returns as a proxy for price trend vs MA.
-        # Positive cumulative returns → likely above MA → bullish.
-        recent = fv.returns[-3:] if len(fv.returns) >= 3 else fv.returns
-        valid_returns = [r for r in recent if r is not None]
-        if not valid_returns:
-            return None
-
-        cumulative = sum(valid_returns)
-        return math.tanh(cumulative * 10.0)  # Scale for sensitivity
+        deviation = (fv.last_close - ma_value) / ma_value
+        return math.tanh(deviation * 100.0)  # Scale for sensitivity
 
     @staticmethod
-    def _score_momentum(momentum_value: float) -> float:
+    def _score_momentum(fv: FeatureVector, momentum_value: float) -> float:
         """
         Score momentum direction.
 
         Positive momentum → bullish
         Negative momentum → bearish
-        Bounded via tanh.
+        
+        Normalized by last_close to ensure scale invariance across instruments.
         """
-        return math.tanh(momentum_value)
+        if momentum_value == 0.0 or fv.last_close == 0.0:
+            return 0.0
+            
+        normalized = momentum_value / fv.last_close
+        return math.tanh(normalized * 100.0)
 
     @staticmethod
     def _score_bollinger(fv: FeatureVector) -> Optional[float]:
         """
         Score the position within Bollinger Bands.
 
-        Near lower band → bullish (potential bounce)
-        Near upper band → bearish (potential reversal)
+        last_close < bollinger_lower -> bullish/reversion evidence
+        last_close > bollinger_upper -> bearish/reversion evidence
+        last_close near/inside the bands -> neutral unless another clearly justified deterministic condition applies
 
-        Uses the %B indicator: (price - lower) / (upper - lower).
-        Since we lack a raw close, we use the midpoint relationship
-        and recent returns as a proxy.
+        This remains a BASELINE / DEVELOPMENT PREDICTOR.
         """
         band_width = fv.bollinger_upper - fv.bollinger_lower
         if band_width <= 0:
             return None
 
-        if fv.returns is None or len(fv.returns) == 0:
-            return None
-
-        # Use returns to determine relative position:
-        # negative returns → price moving toward lower band → bullish
-        # positive returns → price moving toward upper band → bearish
-        recent = fv.returns[-3:] if len(fv.returns) >= 3 else fv.returns
-        valid_returns = [r for r in recent if r is not None]
-        if not valid_returns:
-            return None
-
-        avg_return = sum(valid_returns) / len(valid_returns)
-
-        # Invert: falling price near lower band = bullish potential
-        # Estimate %B-like position from returns
-        # Strong negative returns → likely near lower band → bullish
-        # Strong positive returns → likely near upper band → bearish
-        return -math.tanh(avg_return * 15.0)
+        if fv.last_close < fv.bollinger_lower:
+            return 1.0  # Bullish reversion
+        elif fv.last_close > fv.bollinger_upper:
+            return -1.0 # Bearish reversion
+        else:
+            return 0.0  # Neutral inside bands
 
     def _build_reasoning(
         self,
-        votes: list[tuple[float, float]],
+        votes: list[tuple[str, float, float]],
         score: float,
         direction: PredictionDirection,
     ) -> str:
         """Build a human-readable reasoning string."""
-        n_votes = len(votes)
-        bullish = sum(1 for v, _ in votes if v > 0)
-        bearish = sum(1 for v, _ in votes if v < 0)
-
-        return (
-            f"BASELINE PREDICTOR (not a trading recommendation). "
-            f"Evidence: {n_votes} features scored, "
-            f"{bullish} bullish, {bearish} bearish. "
-            f"Weighted score: {score:+.4f}. "
-            f"Direction: {direction.value}."
-        )
+        bullish_features = [name for name, v, _ in votes if v > 0]
+        bearish_features = [name for name, v, _ in votes if v < 0]
+        neutral_features = [name for name, v, _ in votes if v == 0]
+        
+        parts = ["BASELINE PREDICTOR (not a trading recommendation)."]
+        if bullish_features:
+            parts.append(f"bullish: {', '.join(bullish_features)};")
+        if bearish_features:
+            parts.append(f"bearish: {', '.join(bearish_features)};")
+        if neutral_features:
+            parts.append(f"neutral: {', '.join(neutral_features)};")
+            
+        parts.append(f"Weighted score: {score:+.4f}.")
+        parts.append(f"Direction: {direction.value}.")
+        
+        return " ".join(parts)

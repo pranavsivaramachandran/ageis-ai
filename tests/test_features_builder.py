@@ -66,7 +66,9 @@ class TestFeatureVector:
             timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
             symbol="USD/INR",
             timeframe=Timeframe.D1,
+            last_close=100.0,
         )
+
         with pytest.raises(AttributeError):
             vec.symbol = "EUR/USD"  # type: ignore[misc]
 
@@ -76,7 +78,9 @@ class TestFeatureVector:
             timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
             symbol="USD/INR",
             timeframe=Timeframe.D1,
+            last_close=100.0,
         )
+
         assert vec.returns is None
         assert vec.sma_value is None
         assert vec.ema_value is None
@@ -158,6 +162,14 @@ class TestFeatureBuilderMetadata:
         assert result is not None
         # Latest candle has index=2 → Jan 3
         assert result.timestamp == datetime(2026, 1, 3, tzinfo=timezone.utc)
+
+    def test_last_close_from_latest_candle(self):
+        candles = _make_candles(["50", "55", "63.25"])
+        builder = FeatureBuilder()
+        result = builder.build(candles)
+
+        assert result is not None
+        assert result.last_close == 63.25
 
     def test_timeframe_preserved(self):
         candles = _make_candles(
@@ -282,3 +294,4 @@ class TestFeatureBuilderIntegration:
         ]
         for feat in features:
             assert feat is not None, f"Feature unexpectedly None: {feat}"
+            

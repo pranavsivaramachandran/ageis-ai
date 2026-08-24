@@ -100,3 +100,16 @@ class SystemAlertEvent(BaseEvent):
     severity: AlertSeverity
     source: str = Field(..., min_length=1, description="Component that raised the alert")
     message: str = Field(..., min_length=1, description="Human-readable alert description")
+
+
+class RiskDecisionEvent(BaseEvent):
+    """Result of the risk layer evaluating a prediction."""
+    event_type: str = Field(default="RISK_DECISION", frozen=True)
+    symbol: str = Field(..., min_length=1)
+    direction: str = Field(..., description="Original predicted direction")
+    confidence: Decimal = Field(..., ge=0, le=1)
+    timeframe: Timeframe
+    risk_status: str = Field(..., description="APPROVED or REJECTED")
+    risk_reason: Optional[str] = Field(default=None)
+    risk_amount: Optional[Decimal] = Field(default=None)
+    position_size: Optional[Decimal] = Field(default=None)

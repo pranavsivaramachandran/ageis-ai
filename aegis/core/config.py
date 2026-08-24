@@ -1,3 +1,4 @@
+from decimal import Decimal
 from enum import Enum
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, model_validator
@@ -29,6 +30,14 @@ class AegisConfig(BaseSettings):
     # Analysis Configuration
     ANALYSIS_TIMEFRAME: str = Field(default="15m", description="Primary timeframe for analysis")
     
+    # Risk Management Configuration
+    RISK_MIN_CONFIDENCE: Decimal = Field(default=Decimal("0.7"), description="Minimum confidence required for risk approval.")
+    RISK_MAX_DAILY_LOSS: Decimal = Field(default=Decimal("1000.0"), description="Maximum daily loss allowed.")
+    RISK_MAX_WEEKLY_LOSS: Decimal = Field(default=Decimal("5000.0"), description="Maximum weekly loss allowed.")
+    RISK_MAX_MONTHLY_LOSS: Decimal = Field(default=Decimal("15000.0"), description="Maximum monthly loss allowed.")
+    RISK_MAX_RISK_PER_TRADE: Decimal = Field(default=Decimal("100.0"), description="Maximum risk amount per trade.")
+    RISK_MAX_POSITION_SIZE: Decimal = Field(default=Decimal("10.0"), description="Maximum position size allowed.")
+
     # Database
     DATABASE_URL: str = Field(default="sqlite:///aegis.db", description="Database connection string")
     

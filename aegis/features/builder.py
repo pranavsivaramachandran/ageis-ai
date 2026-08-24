@@ -48,6 +48,7 @@ class FeatureVector:
         timestamp: UTC timestamp of the most recent candle.
         symbol: Instrument symbol.
         timeframe: Candle timeframe.
+        last_close: Closing price of the most recent candle.
         returns: List of simple returns, or None.
         sma_value: Simple Moving Average, or None.
         ema_value: Exponential Moving Average, or None.
@@ -66,6 +67,7 @@ class FeatureVector:
     timestamp: datetime
     symbol: str
     timeframe: Timeframe
+    last_close: float
 
     # Feature values
     returns: Optional[list[float]] = None
@@ -177,6 +179,7 @@ class FeatureBuilder:
         symbol = candles[-1].symbol
         timeframe = candles[-1].timeframe
         timestamp = candles[-1].timestamp
+        last_close = float(candles[-1].close)
 
         for c in candles:
             if c.symbol != symbol:
@@ -219,6 +222,7 @@ class FeatureBuilder:
             timestamp=timestamp,
             symbol=symbol,
             timeframe=timeframe,
+            last_close=last_close,
             returns=returns_val,
             sma_value=sma_val,
             ema_value=ema_val,

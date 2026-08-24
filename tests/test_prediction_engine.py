@@ -35,6 +35,7 @@ def _base_fv(**overrides) -> FeatureVector:
         "timestamp": datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
         "symbol": "RELIANCE",
         "timeframe": Timeframe.H1,
+        "last_close": 100.0,
     }
     defaults.update(overrides)
     return FeatureVector(**defaults)
@@ -46,6 +47,7 @@ def _bullish_fv() -> FeatureVector:
         timestamp=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
         symbol="RELIANCE",
         timeframe=Timeframe.H1,
+        last_close=105.0,
         returns=[0.02, 0.015, 0.018, 0.01, 0.012],
         sma_value=100.0,
         ema_value=101.0,
@@ -68,6 +70,7 @@ def _bearish_fv() -> FeatureVector:
         timestamp=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
         symbol="TATASTEEL",
         timeframe=Timeframe.D1,
+        last_close=95.0,
         returns=[-0.02, -0.015, -0.018, -0.01, -0.012],
         sma_value=100.0,
         ema_value=99.0,
@@ -90,6 +93,7 @@ def _neutral_fv() -> FeatureVector:
         timestamp=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
         symbol="INFY",
         timeframe=Timeframe.H4,
+        last_close=100.0,
         returns=[0.001, -0.001, 0.0005, -0.0005, 0.0002],
         sma_value=100.0,
         ema_value=100.0,
@@ -196,6 +200,7 @@ class TestDirectionalScenarios:
             timestamp=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
             symbol="HDFC",
             timeframe=Timeframe.H1,
+            last_close=100.0,
             rsi_value=48.0,        # Very slightly bullish
             macd_histogram=-0.01,  # Very slightly bearish
         )
@@ -484,3 +489,86 @@ class TestModelMetadata:
         predictor = BaselinePredictor()
         result = predictor.predict(_base_fv())
         assert "No usable features" in result.reasoning
+
+
+class TestMAandBollingerCorrections:
+    """Verify MA and Bollinger logic as per Sprint 4.2 correction."""
+
+    def test_sma_bullish_contribution(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=105.0, sma_value=100.0)
+        votes = predictor._collect_votes(fv)
+        sma_vote = next(v for n, v, w in votes if n == "SMA")
+        assert sma_vote > 0.0
+
+    def test_sma_bearish_contribution(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=95.0, sma_value=100.0)
+        votes = predictor._collect_votes(fv)
+        sma_vote = next(v for n, v, w in votes if n == "SMA")
+        assert sma_vote < 0.0
+
+    def test_sma_neutral_contribution(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=100.0, sma_value=100.0)
+        votes = predictor._collect_votes(fv)
+        sma_vote = next(v for n, v, w in votes if n == "SMA")
+        assert sma_vote == 0.0
+
+    def test_ema_bullish_contribution(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=105.0, ema_value=100.0)
+        votes = predictor._collect_votes(fv)
+        ema_vote = next(v for n, v, w in votes if n == "EMA")
+        assert ema_vote > 0.0
+
+    def test_ema_bearish_contribution(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=95.0, ema_value=100.0)
+        votes = predictor._collect_votes(fv)
+        ema_vote = next(v for n, v, w in votes if n == "EMA")
+        assert ema_vote < 0.0
+
+    def test_ema_neutral_contribution(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=100.0, ema_value=100.0)
+        votes = predictor._collect_votes(fv)
+        ema_vote = next(v for n, v, w in votes if n == "EMA")
+        assert ema_vote == 0.0
+
+    def test_bollinger_bullish_reversion(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=90.0, bollinger_upper=110.0, bollinger_middle=100.0, bollinger_lower=95.0)
+        votes = predictor._collect_votes(fv)
+        bb_vote = next(v for n, v, w in votes if n == "Bollinger")
+        assert bb_vote > 0.0
+
+    def test_bollinger_bearish_reversion(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=115.0, bollinger_upper=110.0, bollinger_middle=100.0, bollinger_lower=95.0)
+        votes = predictor._collect_votes(fv)
+        bb_vote = next(v for n, v, w in votes if n == "Bollinger")
+        assert bb_vote < 0.0
+
+    def test_bollinger_neutral_inside(self):
+        predictor = BaselinePredictor()
+        fv = _base_fv(last_close=100.0, bollinger_upper=110.0, bollinger_middle=100.0, bollinger_lower=95.0)
+        votes = predictor._collect_votes(fv)
+        bb_vote = next(v for n, v, w in votes if n == "Bollinger")
+        assert bb_vote == 0.0
+
+    def test_sma_independent_of_returns(self):
+        predictor = BaselinePredictor()
+        fv1 = _base_fv(last_close=105.0, sma_value=100.0, returns=[0.01])
+        fv2 = _base_fv(last_close=105.0, sma_value=110.0, returns=[0.01])
+        v1 = next(v for n, v, w in predictor._collect_votes(fv1) if n == "SMA")
+        v2 = next(v for n, v, w in predictor._collect_votes(fv2) if n == "SMA")
+        assert v1 != v2
+
+    def test_ema_independent_of_returns(self):
+        predictor = BaselinePredictor()
+        fv1 = _base_fv(last_close=105.0, ema_value=100.0, returns=[0.01])
+        fv2 = _base_fv(last_close=105.0, ema_value=110.0, returns=[0.01])
+        v1 = next(v for n, v, w in predictor._collect_votes(fv1) if n == "EMA")
+        v2 = next(v for n, v, w in predictor._collect_votes(fv2) if n == "EMA")
+        assert v1 != v2

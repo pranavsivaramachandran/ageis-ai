@@ -18,6 +18,11 @@ from aegis.prediction.model_interface import FeatureSchema
 from aegis.prediction.models import PredictionDirection
 
 
+class ExpectedWindowFailure(Exception):
+    """Raised when a walk-forward window is expected to fail (e.g., insufficient data)."""
+    pass
+
+
 class TrainerConfig(BaseModel):
     """Configuration for ML model training."""
     
@@ -54,17 +59,17 @@ class Trainer:
             A trained MLPredictionModel ready for inference.
             
         Raises:
-            ValueError: If dataset is insufficient or has only 1 class.
+            ExpectedWindowFailure: If dataset is insufficient or has only 1 class.
         """
         if len(dataset) < 10:
-            raise ValueError("Insufficient training samples (minimum 10 required).")
+            raise ExpectedWindowFailure("Insufficient training samples (minimum 10 required).")
             
         X = np.array(dataset.x_matrix)
         y = np.array([d.value for d in dataset.y_vector])
         
         classes = np.unique(y)
         if len(classes) < 2:
-            raise ValueError("Training dataset must contain at least 2 distinct classes.")
+            raise ExpectedWindowFailure("Training dataset must contain at least 2 distinct classes.")
             
         # Fit scaler on TRAIN ONLY
         scaler = StandardScaler()

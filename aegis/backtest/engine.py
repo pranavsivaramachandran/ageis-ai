@@ -37,7 +37,7 @@ class BacktestEngine:
         self.open_trade: Optional[SimulatedTrade] = None
         self.holding_ticks = 0
 
-    def run(self, history: list[OHLC]) -> BacktestReport:
+    def run(self, history: list[OHLC], trading_start_timestamp: Optional[datetime] = None) -> BacktestReport:
         """Run the backtest over the provided historical candles."""
         
         self._validate_history(history)
@@ -163,7 +163,11 @@ class BacktestEngine:
             prediction = self.prediction_engine.predict(fv)
             
             # 4. If we have no open trade, check risk and maybe open one
-            if self.open_trade is None and prediction.direction in (PredictionDirection.BUY, PredictionDirection.SELL):
+            can_trade = True
+            if trading_start_timestamp is not None and current_candle.timestamp < trading_start_timestamp:
+                can_trade = False
+                
+            if self.open_trade is None and can_trade and prediction.direction in (PredictionDirection.BUY, PredictionDirection.SELL):
                 # Phase 7: Use fv.atr_value for risk_distance. Reject if missing/zero.
                 if fv.atr_value is None or fv.atr_value <= 0:
                     continue

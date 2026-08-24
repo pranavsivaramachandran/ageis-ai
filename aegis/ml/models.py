@@ -28,7 +28,8 @@ class MLPredictionModel(PredictionModel):
         schema: FeatureSchema,
         classifier,
         scaler,
-        classes_mapping: list[PredictionDirection]
+        classes_mapping: list[PredictionDirection],
+        confidence_threshold: float = 0.5
     ):
         """
         Args:
@@ -45,6 +46,7 @@ class MLPredictionModel(PredictionModel):
         self._classifier = classifier
         self._scaler = scaler
         self._classes_mapping = classes_mapping
+        self._confidence_threshold = confidence_threshold
         
         # Verify the model is actually trained
         # In scikit-learn, fitted classifiers usually have a classes_ attribute
@@ -65,6 +67,16 @@ class MLPredictionModel(PredictionModel):
     @property
     def schema(self) -> FeatureSchema:
         return self._schema
+        
+    @property
+    def confidence_threshold(self) -> float:
+        return self._confidence_threshold
+        
+    @confidence_threshold.setter
+    def confidence_threshold(self, value: float):
+        if not (0.0 <= value <= 1.0):
+            raise ValueError("confidence_threshold must be between 0.0 and 1.0")
+        self._confidence_threshold = value
         
     def is_ready(self) -> bool:
         # For this offline architecture, if it's instantiated it's ready.
@@ -102,11 +114,14 @@ class MLPredictionModel(PredictionModel):
         max_idx = int(np.argmax(proba))
         direction = self._classes_mapping[max_idx]
         
-        # Use round to ensure confidence doesn't have precision issues
         confidence_val = float(proba[max_idx])
         confidence_val = min(max(confidence_val, 0.0), 1.0)
         
-        reasoning = f"ML Classification ({self.model_id} v{self.version}): Confidence {confidence_val:.2f} for {direction.value}"
+        if confidence_val < self._confidence_threshold:
+            direction = PredictionDirection.NEUTRAL
+            reasoning = f"ML Classification ({self.model_id} v{self.version}): Confidence {confidence_val:.2f} below threshold {self._confidence_threshold:.2f}, predicting NEUTRAL"
+        else:
+            reasoning = f"ML Classification ({self.model_id} v{self.version}): Confidence {confidence_val:.2f} for {direction.value}"
         
         return PredictionResult(
             symbol=fv.symbol,

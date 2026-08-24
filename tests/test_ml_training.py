@@ -13,7 +13,7 @@ from aegis.prediction.model_interface import FeatureSchema
 from aegis.prediction.models import PredictionDirection
 from aegis.ml.labels import TargetConfig, TargetGenerator
 from aegis.ml.dataset import MLDatasetBuilder
-from aegis.ml.training import TrainerConfig, Trainer
+from aegis.ml.training import TrainerConfig, Trainer, ExpectedWindowFailure
 
 def build_ohlc_sequence(closes: list[float]) -> list[OHLC]:
     candles = []
@@ -82,7 +82,7 @@ class TestMLTrainer:
         from aegis.ml.dataset import MLDataset
         short_dataset = MLDataset(samples=dataset.samples[:9])
         
-        with pytest.raises(ValueError, match="Insufficient training samples"):
+        with pytest.raises(ExpectedWindowFailure, match="Insufficient training samples"):
             trainer.train(short_dataset)
             
     def test_one_class_behavior(self, setup_data):
@@ -95,7 +95,7 @@ class TestMLTrainer:
             
         one_class_dataset = MLDataset(samples=new_samples)
         
-        with pytest.raises(ValueError, match="must contain at least 2 distinct classes"):
+        with pytest.raises(ExpectedWindowFailure, match="must contain at least 2 distinct classes"):
             trainer.train(one_class_dataset)
             
     def test_deterministic_seed(self, setup_data):

@@ -48,6 +48,7 @@ from typing import Optional
 
 from aegis.features.builder import FeatureVector
 from aegis.prediction.models import PredictionDirection, PredictionResult
+from aegis.prediction.model_interface import PredictionModel, FeatureSchema
 
 
 class PredictionError(Exception):
@@ -73,7 +74,7 @@ _WEIGHTS = {
 }
 
 
-class BaselinePredictor:
+class BaselinePredictor(PredictionModel):
     """
     Deterministic evidence-scoring baseline predictor.
 
@@ -103,9 +104,29 @@ class BaselinePredictor:
             )
         self._threshold = direction_threshold
 
+    @property
+    def model_id(self) -> str:
+        return "baseline"
+        
+    @property
+    def version(self) -> int:
+        return 1
+        
+    @property
+    def schema(self) -> FeatureSchema:
+        return FeatureSchema(
+            schema_version=1,
+            required_features=[]
+        )
+        
+    def is_ready(self) -> bool:
+        return True
+
     def predict(self, fv: FeatureVector) -> PredictionResult:
         """
         Produce a deterministic prediction from a FeatureVector.
+        
+        Before predicting, the FeatureVector is validated against the model's schema.
 
         Args:
             fv: A FeatureVector containing computed technical features.
@@ -114,11 +135,13 @@ class BaselinePredictor:
             A PredictionResult with direction, confidence, and reasoning.
 
         Raises:
-            PredictionError: If the FeatureVector contains invalid values
-                             (NaN/Inf in numeric fields).
+            PredictionError: If the FeatureVector violates the schema (missing/invalid inputs).
         """
-        self._validate_features(fv)
-
+        try:
+            self.schema.validate_features(fv)
+        except ValueError as e:
+            raise PredictionError(str(e))
+            
         votes = self._collect_votes(fv)
 
         if not votes:
@@ -169,35 +192,8 @@ class BaselinePredictor:
     # ===============================================================
 
     def _validate_features(self, fv: FeatureVector) -> None:
-        """Reject FeatureVectors containing NaN or Inf values."""
-        numeric_fields = [
-            ("sma_value", fv.sma_value),
-            ("ema_value", fv.ema_value),
-            ("rsi_value", fv.rsi_value),
-            ("macd_line", fv.macd_line),
-            ("macd_signal", fv.macd_signal),
-            ("macd_histogram", fv.macd_histogram),
-            ("atr_value", fv.atr_value),
-            ("bollinger_upper", fv.bollinger_upper),
-            ("bollinger_middle", fv.bollinger_middle),
-            ("bollinger_lower", fv.bollinger_lower),
-            ("momentum_value", fv.momentum_value),
-            ("volatility", fv.volatility),
-        ]
-
-        for name, value in numeric_fields:
-            if value is not None and (math.isnan(value) or math.isinf(value)):
-                raise PredictionError(
-                    f"FeatureVector contains invalid {name}: {value}"
-                )
-
-        # Also validate returns list if present
-        if fv.returns is not None:
-            for i, r in enumerate(fv.returns):
-                if r is not None and (math.isnan(r) or math.isinf(r)):
-                    raise PredictionError(
-                        f"FeatureVector contains invalid return at index {i}: {r}"
-                    )
+        """Reject FeatureVectors containing NaN or Inf values. Handled by schema."""
+        pass
 
     def _collect_votes(
         self, fv: FeatureVector
@@ -372,3 +368,15 @@ class BaselinePredictor:
         parts.append(f"Direction: {direction.value}.")
         
         return " ".join(parts)
+
+class PredictionEngine:
+    """
+    Higher-level prediction engine that delegates to a registered PredictionModel.
+    """
+    
+    def __init__(self, model: PredictionModel):
+        self.model = model
+        
+    def predict(self, fv: FeatureVector) -> PredictionResult:
+        """Forward the prediction request to the underlying model."""
+        return self.model.predict(fv)

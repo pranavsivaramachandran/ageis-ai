@@ -373,6 +373,11 @@ class PredictionEngine:
     def __init__(self, model: PredictionModel):
         self.model = model
         
+    @property
+    def schema(self) -> FeatureSchema:
+        """Proxy schema to the underlying model."""
+        return self.model.schema
+        
     def predict(self, fv: FeatureVector) -> PredictionResult:
         """Forward the prediction request to the underlying model."""
         if not self.model.is_ready():

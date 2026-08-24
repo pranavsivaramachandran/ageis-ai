@@ -149,6 +149,16 @@ class BacktestEngine:
                 # Not enough data for warm-up
                 continue
                 
+            # Check warm-up against model schema (handle upstream of ML model)
+            is_warmup = False
+            for req_feature in self.prediction_engine.schema.required_features:
+                if getattr(fv, req_feature, None) is None:
+                    is_warmup = True
+                    break
+                    
+            if is_warmup:
+                continue
+                
             # 3. Predict
             prediction = self.prediction_engine.predict(fv)
             

@@ -79,4 +79,4 @@ class TestMLBaselineComparison:
         
         # ML Model has different ID
         assert baseline_result.model_name == "baseline_development_predictor"
-        assert ml_result.model_name == "ml_test"
+        assert ml_result.model_name == "ml_test_lr"

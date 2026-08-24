@@ -56,6 +56,10 @@ class WindowMetrics:
     baseline_total_trades: int
     baseline_max_drawdown: Decimal
 
+    ensemble_pnl: Decimal | None = None
+    ensemble_total_trades: int | None = None
+    ensemble_max_drawdown: Decimal | None = None
+
 
 @dataclass(frozen=True)
 class WindowResult:
@@ -68,7 +72,11 @@ class WindowResult:
     test_samples: int
     
     metrics: WindowMetrics
+    
+    # Model Selection Info
     ml_model_id: str
+    selection_metric: str | None = None
+    selection_reason: str | None = None
     
     error: str | None = None
 
@@ -87,12 +95,17 @@ class WalkForwardReport:
     mean_ml_f1: float
     mean_ml_pnl: Decimal
     mean_baseline_pnl: Decimal
-    
     ml_win_percentage: float
     
     worst_ml_pnl: Decimal
     best_ml_pnl: Decimal
     worst_drawdown: Decimal
+    
+    mean_ensemble_pnl: Decimal | None = None
+    ensemble_win_percentage: float | None = None
+    worst_ensemble_pnl: Decimal | None = None
+    best_ensemble_pnl: Decimal | None = None
+    worst_ensemble_drawdown: Decimal | None = None
 
 
 @dataclass(frozen=True)

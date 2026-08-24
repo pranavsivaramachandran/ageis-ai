@@ -78,6 +78,18 @@ class MLPredictionModel(PredictionModel):
             raise ValueError("confidence_threshold must be between 0.0 and 1.0")
         self._confidence_threshold = value
         
+    @property
+    def classifier(self):
+        return self._classifier
+        
+    @property
+    def scaler(self):
+        return self._scaler
+
+    @property
+    def classes_mapping(self) -> list[PredictionDirection]:
+        return self._classes_mapping
+
     def is_ready(self) -> bool:
         # For this offline architecture, if it's instantiated it's ready.
         return True
@@ -92,29 +104,33 @@ class MLPredictionModel(PredictionModel):
             extracted.append(float(val))
         return extracted
 
-    def predict(self, fv: FeatureVector) -> PredictionResult:
-        """
-        Produce a deterministic prediction from a FeatureVector.
-        """
+    def predict_proba(self, fv: FeatureVector) -> dict[PredictionDirection, float]:
+        """Returns raw probabilities mapped to PredictionDirection."""
         if not self.is_ready():
             raise RuntimeError(f"Model {self.model_id} is not ready.")
             
-        # 1. Extract and validate
         raw_features = self._extract_features(fv)
-        
-        # 2. Scale
         X = np.array(raw_features).reshape(1, -1)
         if self._scaler is not None:
             X = self._scaler.transform(X)
             
-        # 3. Predict
         proba = self._classifier.predict_proba(X)[0]
         
-        # 4. Map to PredictionDirection and Confidence
-        max_idx = int(np.argmax(proba))
-        direction = self._classes_mapping[max_idx]
+        result = {}
+        for idx, direction in enumerate(self._classes_mapping):
+            result[direction] = float(proba[idx])
+            
+        return result
+
+    def predict(self, fv: FeatureVector) -> PredictionResult:
+        """
+        Produce a deterministic prediction from a FeatureVector.
+        """
+        probs = self.predict_proba(fv)
         
-        confidence_val = float(proba[max_idx])
+        # 4. Map to PredictionDirection and Confidence
+        direction = max(probs, key=probs.get) # type: ignore
+        confidence_val = probs[direction]
         confidence_val = min(max(confidence_val, 0.0), 1.0)
         
         if confidence_val < self._confidence_threshold:

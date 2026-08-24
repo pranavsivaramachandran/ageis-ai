@@ -120,6 +120,8 @@ class WalkForwardEvaluator:
                     train_samples=0, validation_samples=0, test_samples=0,
                     metrics=WindowMetrics(0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0), # type: ignore
                     ml_model_id="",
+                    selection_metric=None,
+                    selection_reason=None,
                     error=str(e)
                 ))
 
@@ -127,7 +129,11 @@ class WalkForwardEvaluator:
         
         ml_agg = aggregate_ml_metrics(successful_results)
         fin_agg = aggregate_financial_metrics(successful_results)
+        
+        from aegis.evaluation.metrics import calculate_ensemble_win_percentage
+        
         win_pct = calculate_win_percentage(successful_results)
+        ens_win_pct = calculate_ensemble_win_percentage(successful_results)
 
         return WalkForwardReport(
             experiment_id=experiment_id,
@@ -139,23 +145,21 @@ class WalkForwardEvaluator:
             mean_ml_f1=ml_agg["mean_ml_f1"],
             mean_ml_pnl=fin_agg["mean_ml_pnl"],
             mean_baseline_pnl=fin_agg["mean_baseline_pnl"],
+            mean_ensemble_pnl=fin_agg.get("mean_ensemble_pnl"),
             ml_win_percentage=win_pct,
+            ensemble_win_percentage=ens_win_pct,
             worst_ml_pnl=fin_agg["worst_ml_pnl"],
             best_ml_pnl=fin_agg["best_ml_pnl"],
-            worst_drawdown=fin_agg["worst_drawdown"]
+            worst_drawdown=fin_agg["worst_drawdown"],
+            worst_ensemble_pnl=fin_agg.get("worst_ensemble_pnl"),
+            best_ensemble_pnl=fin_agg.get("best_ensemble_pnl"),
+            worst_ensemble_drawdown=fin_agg.get("worst_ensemble_drawdown")
         )
         
     def _evaluate_window(self, history: list[OHLC], split: WindowSplit, config: WalkForwardConfig, sim_config: SimulationConfig) -> WindowResult:
-        # 1. Partition Data
-        # We need historical data for feature building. The MLDatasetBuilder internally uses
-        # history up to `i` to build features for `i`. 
-        # To prevent leakage, we provide it with exactly the historical segments required.
-        # But `MLDatasetBuilder` expects absolute indices. It's safer to pass the segment.
-        
         train_data = history[:split.train_end]
         train_dataset = self.dataset_builder.build(train_data)
         
-        # We only want samples in the train window
         train_samples = [s for s in train_dataset.samples 
                          if history[split.train_start].timestamp <= s.timestamp <= history[split.train_end - 1].timestamp]
         from aegis.ml.dataset import MLDataset
@@ -179,61 +183,91 @@ class WalkForwardEvaluator:
         if len(test_dataset) == 0:
             raise ExpectedWindowFailure("Test set resulted in 0 samples after feature generation.")
 
-        # 2. Train Model on Train Dataset
-        model_id = f"ml_window_{split.window_id}"
-        model = self.trainer.train(train_dataset, model_id=model_id)
+        # 2. Train Candidates on Train Dataset
+        base_model_id = f"ml_window_{split.window_id}"
+        candidates = self.trainer.train_candidates(train_dataset, base_model_id=base_model_id)
         
-        # 2.5 Validation Tuning: Select confidence threshold
-        if len(validation_dataset) > 0:
-            best_f1 = -1.0
-            best_threshold = 0.5
-            # Grid search for the best threshold
-            for threshold in [0.4, 0.5, 0.6, 0.7, 0.8]:
-                model.confidence_threshold = threshold
-                val_metrics = MLEvaluator.evaluate(model, validation_dataset)
-                if val_metrics.f1_macro > best_f1:
-                    best_f1 = val_metrics.f1_macro
-                    best_threshold = threshold
-            # Freeze the optimal threshold for the test set
-            model.confidence_threshold = best_threshold
+        if len(validation_dataset) == 0:
+            raise ExpectedWindowFailure("Validation set is empty, cannot perform model selection or calibration.")
+            
+        # 3. Model Selection
+        from aegis.ml.selection import ModelSelector
+        val_metrics = {}
+        for cand in candidates:
+            cand_metrics = MLEvaluator.evaluate(cand, validation_dataset)
+            val_metrics[cand.model_id] = cand_metrics
+            
+        selector = ModelSelector(metric_name="f1_macro")
+        selection_result = selector.select(candidates, val_metrics)
+        best_model = selection_result.selected_model
         
-        # 3. Evaluate ML Metrics on Test Dataset
-        ml_metrics = MLEvaluator.evaluate(model, test_dataset)
+        # 4. Calibration (on validation set)
+        from aegis.ml.calibration import IsotonicCalibrator, CalibratedPredictionModel
+        import numpy as np
         
-        # 4. Financial Evaluation - ML Model
-        # Backtest Engine needs history to build features.
-        ml_prediction_engine = PredictionEngine(model)
-        ml_backtest = BacktestEngine(
-            feature_builder=self.feature_builder,
-            prediction_engine=ml_prediction_engine,
-            risk_engine=self.risk_engine,
-            config=sim_config
-        )
+        # Get raw probabilities on validation set
+        val_X = np.array(validation_dataset.x_matrix)
+        if best_model.scaler:
+            val_X = best_model.scaler.transform(val_X)
+            
+        val_y = np.array([s.value for s in validation_dataset.y_vector])
         
-        # Only run the backtest over the test_data, but engine needs history up to it for features.
-        # So we supply test_data, and backtest Engine will naturally trade throughout it.
-        # However, to be perfectly chronological, we want the engine to only simulate trades ON the test indices.
-        # Let's slice the history but keep enough for feature warmup.
+        calibrators = {}
+        from aegis.prediction.models import PredictionDirection
+        raw_val_probs = best_model.classifier.predict_proba(val_X)
+        
+        for idx, direction in enumerate(best_model.classes_mapping):
+            cal = IsotonicCalibrator()
+            direction_probs = raw_val_probs[:, idx]
+            # true label is 1 if it matches the current class, else 0
+            binary_labels = (val_y == direction.value).astype(int)
+            cal.fit(direction_probs, binary_labels)
+            calibrators[direction] = cal
+            
+        calibrated_model = CalibratedPredictionModel(best_model, calibrators)
+        
+        # 5. Ensemble
+        from aegis.ml.ensemble import EnsemblePredictionModel
+        num_cands = len(candidates)
+        ensemble_weights = [1.0 / num_cands] * num_cands
+        ensemble_model = EnsemblePredictionModel(candidates, ensemble_weights)
+        
+        # 6. Evaluate Selected Model on Test Dataset (ML Metrics)
+        ml_metrics = MLEvaluator.evaluate(calibrated_model, test_dataset)
+        
+        # 7. Financial Evaluation
         warmup_required = self.feature_builder.minimum_candles
         backtest_start_idx = max(0, split.test_start - warmup_required)
         backtest_history = history[backtest_start_idx:split.test_end]
-        
         test_start_ts = history[split.test_start].timestamp
-        ml_report = ml_backtest.run(backtest_history, trading_start_timestamp=test_start_ts)
         
-        # 5. Financial Evaluation - Baseline Model
-        # For Sprint 10 MVP, if no baseline is provided we can use a dummy baseline model.
-        # Actually `BaselinePredictionModel` exists in aegis.prediction.models, returning NEUTRAL always?
+        # Baseline
         baseline_model = BaselinePredictor()
-        # We need a schema for prediction engine
-        baseline_prediction_engine = PredictionEngine(baseline_model)
         baseline_backtest = BacktestEngine(
             feature_builder=self.feature_builder,
-            prediction_engine=baseline_prediction_engine,
+            prediction_engine=PredictionEngine(baseline_model),
             risk_engine=self.risk_engine,
             config=sim_config
         )
         baseline_report = baseline_backtest.run(backtest_history, trading_start_timestamp=test_start_ts)
+        
+        # Selected ML
+        ml_backtest = BacktestEngine(
+            feature_builder=self.feature_builder,
+            prediction_engine=PredictionEngine(calibrated_model),
+            risk_engine=self.risk_engine,
+            config=sim_config
+        )
+        ml_report = ml_backtest.run(backtest_history, trading_start_timestamp=test_start_ts)
+        
+        # Ensemble
+        ensemble_backtest = BacktestEngine(
+            feature_builder=self.feature_builder,
+            prediction_engine=PredictionEngine(ensemble_model),
+            risk_engine=self.risk_engine,
+            config=sim_config
+        )
+        ensemble_report = ensemble_backtest.run(backtest_history, trading_start_timestamp=test_start_ts)
         
         metrics = WindowMetrics(
             ml_accuracy=ml_metrics.accuracy,
@@ -245,7 +279,10 @@ class WalkForwardEvaluator:
             ml_max_drawdown=ml_report.max_drawdown,
             baseline_pnl=baseline_report.total_pnl,
             baseline_total_trades=baseline_report.total_trades,
-            baseline_max_drawdown=baseline_report.max_drawdown
+            baseline_max_drawdown=baseline_report.max_drawdown,
+            ensemble_pnl=ensemble_report.total_pnl,
+            ensemble_total_trades=ensemble_report.total_trades,
+            ensemble_max_drawdown=ensemble_report.max_drawdown
         )
         
         return WindowResult(
@@ -255,5 +292,7 @@ class WalkForwardEvaluator:
             validation_samples=len(validation_dataset),
             test_samples=len(test_dataset),
             metrics=metrics,
-            ml_model_id=model_id
+            ml_model_id=calibrated_model.model_id,
+            selection_metric=selection_result.selection_metric,
+            selection_reason=selection_result.reason
         )

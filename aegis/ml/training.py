@@ -48,19 +48,29 @@ class Trainer:
         
     def train(self, dataset: MLDataset, model_id: str = "ml_baseline", version: int = 1) -> MLPredictionModel:
         """
-        Train a model on the provided dataset.
+        Train a model on the provided dataset. (Maintains backward compatibility by returning LogisticRegression).
+        """
+        candidates = self.train_candidates(dataset, base_model_id=model_id, version=version)
+        # Default to the first candidate (Logistic Regression) for backward compatibility
+        return candidates[0]
+
+    def train_candidates(self, dataset: MLDataset, base_model_id: str = "ml", version: int = 1) -> list[MLPredictionModel]:
+        """
+        Train multiple candidate models on the provided dataset.
         
         Args:
             dataset: The training dataset.
-            model_id: Deterministic ID for the resulting model.
+            base_model_id: Deterministic base ID for the resulting models.
             version: Model version.
             
         Returns:
-            A trained MLPredictionModel ready for inference.
+            A list of trained MLPredictionModel candidates ready for inference.
             
         Raises:
             ExpectedWindowFailure: If dataset is insufficient or has only 1 class.
         """
+        from sklearn.ensemble import RandomForestClassifier
+        
         if len(dataset) < 10:
             raise ExpectedWindowFailure("Insufficient training samples (minimum 10 required).")
             
@@ -75,23 +85,44 @@ class Trainer:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
-        # Fit classifier
-        classifier = LogisticRegression(
+        candidates = []
+        
+        # Candidate 1: Logistic Regression
+        lr = LogisticRegression(
             random_state=self.config.random_state,
             max_iter=self.config.max_iter,
             C=self.config.c_param,
-            class_weight="balanced"  # To handle class imbalance typical in finance
+            class_weight="balanced"
         )
-        classifier.fit(X_scaled, y)
+        lr.fit(X_scaled, y)
+        lr_classes_mapping = [PredictionDirection(c) for c in lr.classes_]
         
-        # Determine classes mapping
-        classes_mapping = [PredictionDirection(c) for c in classifier.classes_]
-        
-        return MLPredictionModel(
-            model_id=model_id,
+        candidates.append(MLPredictionModel(
+            model_id=f"{base_model_id}_lr",
             version=version,
             schema=self.schema,
-            classifier=classifier,
+            classifier=lr,
             scaler=scaler,
-            classes_mapping=classes_mapping
+            classes_mapping=lr_classes_mapping
+        ))
+        
+        # Candidate 2: Random Forest
+        rf = RandomForestClassifier(
+            random_state=self.config.random_state,
+            n_estimators=100,
+            max_depth=5,
+            class_weight="balanced"
         )
+        rf.fit(X_scaled, y)
+        rf_classes_mapping = [PredictionDirection(c) for c in rf.classes_]
+        
+        candidates.append(MLPredictionModel(
+            model_id=f"{base_model_id}_rf",
+            version=version,
+            schema=self.schema,
+            classifier=rf,
+            scaler=scaler,
+            classes_mapping=rf_classes_mapping
+        ))
+        
+        return candidates

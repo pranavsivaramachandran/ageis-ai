@@ -71,7 +71,7 @@ class TestMLTrainer:
         model = trainer.train(dataset, "test_model", 1)
         
         assert model.is_ready()
-        assert model.model_id == "test_model"
+        assert model.model_id == "test_model_lr"
         assert model.version == 1
         
     def test_insufficient_samples(self, setup_data):

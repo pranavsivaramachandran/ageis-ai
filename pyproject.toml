@@ -30,3 +30,6 @@ packages = ["aegis"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: tests requiring a real file-backed integration database",
+]

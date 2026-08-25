@@ -6,13 +6,14 @@ from datetime import datetime, timezone
 from aegis.governance.models import (
     ExperimentRecord, PromotionPolicy, PromotionDecision, PromotionDecisionType, ChampionHealth, ExperimentStatus
 )
+from aegis.governance.reproducibility import ReproducibilityReceipt, VerificationStatus
 from aegis.prediction.registry import ModelRegistry
 
 class GovernanceEvaluator:
     def __init__(self, registry: ModelRegistry):
         self.registry = registry
 
-    def evaluate_candidate(self, experiment: ExperimentRecord, policy: PromotionPolicy, evidence: dict, model_version: int, is_reproducible: bool, is_safe: bool) -> PromotionDecision:
+    def evaluate_candidate(self, experiment: ExperimentRecord, policy: PromotionPolicy, evidence: dict, model_version: int, reproducibility_receipt: ReproducibilityReceipt, is_safe: bool) -> PromotionDecision:
         candidate_id = experiment.candidate_model_ids[0] if experiment.candidate_model_ids else "unknown"
         
         # Check explicit gates
@@ -22,8 +23,8 @@ class GovernanceEvaluator:
         if not is_safe and policy.require_safety_check:
             return self._reject(candidate_id, model_version, policy, "Safety check failed", evidence)
             
-        if not is_reproducible and policy.require_reproducibility:
-            return self._reject(candidate_id, model_version, policy, "Reproducibility check failed", evidence)
+        if reproducibility_receipt.status != VerificationStatus.VERIFIED and policy.require_reproducibility:
+            return self._reject(candidate_id, model_version, policy, f"Reproducibility check failed. Status: {reproducibility_receipt.status.value}", evidence)
 
         # Evaluate metrics
         metrics = experiment.overall_metrics

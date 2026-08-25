@@ -12,6 +12,7 @@ from aegis.governance.models import (
 )
 from aegis.governance.evaluator import GovernanceEvaluator
 from aegis.prediction.registry import ModelRegistry
+from aegis.governance.reproducibility import ReproducibilityReceipt, VerificationStatus
 from aegis.prediction.model_interface import PredictionModel, FeatureSchema
 from aegis.core.config import ExecutionMode
 
@@ -66,7 +67,7 @@ def run_demo():
     )
     
     logger.info("Evaluating Candidate A...")
-    decision_a = evaluator.evaluate_candidate(exp_a, policy, {}, candidate_a.version, is_reproducible=True, is_safe=True)
+    decision_a = evaluator.evaluate_candidate(exp_a, policy, {}, candidate_a.version, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="fp1", status=VerificationStatus.VERIFIED), is_safe=True)
     logger.info(f"Decision for Candidate A: {decision_a.decision.name} - Reason: {decision_a.reason}")
     registry.reject(candidate_a.model_id, candidate_a.version, decision_a)
     
@@ -87,7 +88,7 @@ def run_demo():
     )
     
     logger.info("Evaluating Candidate B...")
-    decision_b = evaluator.evaluate_candidate(exp_b, policy, {}, candidate_b.version, is_reproducible=True, is_safe=True)
+    decision_b = evaluator.evaluate_candidate(exp_b, policy, {}, candidate_b.version, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="fp1", status=VerificationStatus.VERIFIED), is_safe=True)
     logger.info(f"Decision for Candidate B: {decision_b.decision.name}")
     
     registry.promote(candidate_b.model_id, candidate_b.version, decision_b)
@@ -111,7 +112,7 @@ def run_demo():
     )
     
     logger.info("Evaluating Challenger C against Policy...")
-    decision_c = evaluator.evaluate_candidate(exp_c, policy, {}, candidate_c.version, is_reproducible=True, is_safe=True)
+    decision_c = evaluator.evaluate_candidate(exp_c, policy, {}, candidate_c.version, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="fp1", status=VerificationStatus.VERIFIED), is_safe=True)
     logger.info(f"Decision for Challenger C: {decision_c.decision.name}")
     
     registry.promote(candidate_c.model_id, candidate_c.version, decision_c)

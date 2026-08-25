@@ -2,6 +2,7 @@ import pytest
 from aegis.governance.models import PromotionPolicy, ExperimentRecord, PromotionDecisionType, ExperimentStatus
 from aegis.governance.evaluator import GovernanceEvaluator
 from aegis.prediction.registry import ModelRegistry
+from aegis.governance.reproducibility import ReproducibilityReceipt, VerificationStatus
 
 def test_promotion_policy_valid_candidate_promoted():
     registry = ModelRegistry()
@@ -28,7 +29,7 @@ def test_promotion_policy_valid_candidate_promoted():
         }
     )
     
-    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, is_reproducible=True, is_safe=True)
+    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="fp1", status=VerificationStatus.VERIFIED), is_safe=True)
     assert decision.decision == PromotionDecisionType.PROMOTE
 
 def test_promotion_policy_insufficient_evidence_rejected():
@@ -56,7 +57,7 @@ def test_promotion_policy_insufficient_evidence_rejected():
         }
     )
     
-    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, is_reproducible=True, is_safe=True)
+    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="fp1", status=VerificationStatus.VERIFIED), is_safe=True)
     assert decision.decision == PromotionDecisionType.REJECT
     assert "Insufficient walk-forward windows" in decision.reason
 
@@ -71,7 +72,7 @@ def test_promotion_policy_failed_experiment_cannot_promote():
         overall_metrics={}
     )
     
-    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, is_reproducible=True, is_safe=True)
+    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="fp1", status=VerificationStatus.VERIFIED), is_safe=True)
     assert decision.decision == PromotionDecisionType.REJECT
     assert "FAILED status" in decision.reason
 
@@ -88,7 +89,7 @@ def test_promotion_policy_non_reproducible_rejected():
         }
     )
     
-    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, is_reproducible=False, is_safe=True)
+    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="missing", status=VerificationStatus.FAILED), is_safe=True)
     assert decision.decision == PromotionDecisionType.REJECT
     assert "Reproducibility check failed" in decision.reason
 
@@ -105,6 +106,6 @@ def test_promotion_policy_safety_failure_rejected():
         }
     )
     
-    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, is_reproducible=True, is_safe=False)
+    decision = evaluator.evaluate_candidate(experiment, policy, {}, 1, reproducibility_receipt=ReproducibilityReceipt(experiment_id="exp-1", model_identity="m1", dataset_identity="d1", feature_identity="f1", target_identity="t1", training_config_identity="tc1", expected_fingerprint="fp1", observed_fingerprint="fp1", status=VerificationStatus.VERIFIED), is_safe=False)
     assert decision.decision == PromotionDecisionType.REJECT
     assert "Safety check failed" in decision.reason

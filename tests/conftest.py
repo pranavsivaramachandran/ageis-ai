@@ -9,8 +9,39 @@ from sqlalchemy.orm import sessionmaker
 from aegis.state.machine import StateMachine, SystemState, state_machine
 from aegis.db.models.base import Base
 from aegis.core.config import AegisConfig
+from aegis.db import session as db_session_module
+import os
+import tempfile
 
+@pytest.fixture(autouse=True)
+def init_global_db(request):
+    """Replaces global DB engine with in-memory SQLite and initializes schema before every test."""
+    if request.node.get_closest_marker("integration"):
+        yield
+        return
+        
+    test_engine = create_engine("sqlite:///:memory:")
+    db_session_module.engine = test_engine
+    db_session_module.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    db_session_module.init_db()
+    yield
+    test_engine.dispose()
 
+@pytest.fixture
+def integration_db():
+    """Provides a persistent file-backed SQLite database for integration tests."""
+    fd, temp_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    
+    test_engine = create_engine(f"sqlite:///{temp_path}")
+    db_session_module.engine = test_engine
+    db_session_module.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    db_session_module.init_db()
+    
+    yield temp_path
+    
+    test_engine.dispose()
+    os.remove(temp_path)
 @pytest.fixture
 def fresh_state_machine():
     """Returns a new StateMachine instance — no global state pollution."""

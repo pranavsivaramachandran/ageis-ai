@@ -69,11 +69,3 @@ class GovernanceEvaluator:
             new_champion=None
         )
 
-class DegradationMonitor:
-    @staticmethod
-    def assess_health(metrics: dict, policy: PromotionPolicy) -> ChampionHealth:
-        if "max_drawdown" in metrics and metrics["max_drawdown"] > policy.max_drawdown_pct:
-            return ChampionHealth.DEGRADED
-        if "mean_f1" in metrics and metrics["mean_f1"] < policy.min_mean_f1:
-            return ChampionHealth.DEGRADED
-        return ChampionHealth.HEALTHY

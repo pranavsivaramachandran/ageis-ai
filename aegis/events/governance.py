@@ -32,3 +32,19 @@ class ModelRetiredEvent(BaseEvent):
     event_type: str = Field(default="MODEL_RETIRED", frozen=True)
     model_identity: str
     version: int
+
+class ChampionHealthAssessedEvent(BaseEvent):
+    event_type: str = Field(default="CHAMPION_HEALTH_ASSESSED", frozen=True)
+    champion_identity: str
+    champion_version: int
+    assessment_identity: str
+    health_state: str
+
+class MonitoringAlertRaisedEvent(BaseEvent):
+    event_type: str = Field(default="MONITORING_ALERT_RAISED", frozen=True)
+    alert_identity: str
+    severity: str
+    category: str
+    champion_identity: str
+    champion_version: int
+

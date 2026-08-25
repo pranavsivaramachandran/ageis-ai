@@ -13,7 +13,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from aegis.db.models.system_event import SystemEvent
+
 from aegis.interfaces.market_data import Tick, OHLC, Timeframe
 from aegis.interfaces.broker import OrderRequest
 
@@ -39,8 +39,9 @@ class BaseEvent(BaseModel):
 
     model_config = {"frozen": True}
 
-    def to_system_event(self) -> SystemEvent:
+    def to_system_event(self):
         """Convert this in-memory event to a persistable SystemEvent ORM instance."""
+        from aegis.db.models.system_event import SystemEvent
         return SystemEvent(
             event_type=self.event_type,
             detail=self.model_dump_json(),
